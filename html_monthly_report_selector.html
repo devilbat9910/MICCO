@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    .header {
+      text-align: center;
+      font-weight: bold;
+      margin-bottom: 20px;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    .checkbox-list {
+      max-height: 250px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      padding: 10px;
+      margin-bottom: 15px;
+    }
+    .checkbox-item {
+      margin-bottom: 5px;
+    }
+    .hidden {
+      display: none;
+    }
+    .btn {
+      padding: 8px 15px;
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .btn:hover {
+      background-color: #2a75f3;
+    }
+    #error-message {
+      color: red;
+      margin-top: 10px;
+    }
+    .loading {
+      text-align: center;
+      margin: 10px 0;
+    }
+    .actions {
+      margin-top: 10px;
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    Tổng hợp báo cáo theo tháng
+  </div>
+  
+  <div class="form-group">
+    <label for="monthSelect">Tháng/Năm báo cáo:</label>
+    <input type="month" id="monthSelect" onchange="updateSheetList()">
+  </div>
+  
+  <div class="form-group">
+    <label>Danh sách các đơn vị:</label>
+    <div class="checkbox-list" id="sheetList">
+      <div class="loading">Đang tải...</div>
+    </div>
+    
+    <div class="actions">
+      <button onclick="selectAll(true)">Chọn tất cả</button>
+      <button onclick="selectAll(false)">Bỏ chọn tất cả</button>
+    </div>
+  </div>
+  
+  <div id="error-message" class="hidden"></div>
+  
+  <div class="form-group" style="text-align: center;">
+    <button class="btn" onclick="processSelectedSheets()">Tổng hợp báo cáo</button>
+  </div>
+  
+  <script>
+    // Khi trang được tải
+    document.addEventListener('DOMContentLoaded', function() {
+      // Thiết lập giá trị mặc định cho tháng/năm là tháng hiện tại
+      var today = new Date();
+      var month = String(today.getMonth() + 1).padStart(2, '0');
+      var year = today.getFullYear();
+      document.getElementById('monthSelect').value = year + '-' + month;
+      
+      // Tải danh sách sheet ban đầu
+      updateSheetList();
+    });
+    
+    // Cập nhật danh sách sheet dựa trên tháng/năm được chọn
+    function updateSheetList() {
+      var monthSelect = document.getElementById('monthSelect');
+      var monthValue = monthSelect.value;
+      var sheetList = document.getElementById('sheetList');
+      
+      // Hiển thị thông báo đang tải
+      sheetList.innerHTML = '<div class="loading">Đang tải...</div>';
+      
+      // Chuyển đổi định dạng tháng từ YYYY-MM sang MM/YYYY
+      var parts = monthValue.split('-');
+      if (parts.length === 2) {
+        var month = parts[1];
+        var year = parts[0];
+        var formattedMonth = month + '/' + year;
+        
+        // Gọi hàm server để lấy danh sách sheet phù hợp
+        google.script.run
+          .withSuccessHandler(function(sheets) {
+            displaySheetList(sheets);
+          })
+          .withFailureHandler(function(error) {
+            sheetList.innerHTML = '<div class="error">Lỗi: ' + error + '</div>';
+          })
+          .getReportSheetsByMonth(formattedMonth);
+      } else {
+        sheetList.innerHTML = '<div class="error">Vui lòng chọn tháng/năm hợp lệ</div>';
+      }
+    }
+    
+    // Hiển thị danh sách sheet với checkbox
+    function displaySheetList(sheets) {
+      var sheetList = document.getElementById('sheetList');
+      sheetList.innerHTML = '';
+      
+      if (sheets && sheets.length > 0) {
+        for (var i = 0; i < sheets.length; i++) {
+          var sheet = sheets[i];
+          var checkboxItem = document.createElement('div');
+          checkboxItem.className = 'checkbox-item';
+          
+          var checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.id = 'sheet_' + i;
+          checkbox.value = sheet.name;
+          checkbox.checked = true; // Mặc định chọn tất cả
+          
+          var label = document.createElement('label');
+          label.htmlFor = 'sheet_' + i;
+          label.textContent = sheet.name + (sheet.visible ? '' : ' (Ẩn)');
+          
+          checkboxItem.appendChild(checkbox);
+          checkboxItem.appendChild(label);
+          sheetList.appendChild(checkboxItem);
+        }
+      } else {
+        sheetList.innerHTML = '<div>Không tìm thấy sheet nào phù hợp với tháng/năm đã chọn</div>';
+      }
+    }
+    
+    // Chọn hoặc bỏ chọn tất cả
+    function selectAll(select) {
+      var checkboxes = document.querySelectorAll('#sheetList input[type="checkbox"]');
+      for (var i = 0; i < checkboxes.length; i++) {
+        checkboxes[i].checked = select;
+      }
+    }
+    
+    // Xử lý các sheet được chọn
+    function processSelectedSheets() {
+      var checkboxes = document.querySelectorAll('#sheetList input[type="checkbox"]:checked');
+      var selectedSheets = [];
+      
+      for (var i = 0; i < checkboxes.length; i++) {
+        selectedSheets.push(checkboxes[i].value);
+      }
+      
+      // Hiển thị thông báo lỗi nếu không có sheet nào được chọn
+      var errorMessage = document.getElementById('error-message');
+      if (selectedSheets.length === 0) {
+        errorMessage.textContent = 'Vui lòng chọn ít nhất một đơn vị.';
+        errorMessage.classList.remove('hidden');
+        return;
+      } else {
+        errorMessage.classList.add('hidden');
+      }
+      
+      // Lấy tháng/năm đã chọn
+      var monthSelect = document.getElementById('monthSelect');
+      var monthValue = monthSelect.value;
+      var parts = monthValue.split('-');
+      var month = parts[1];
+      var year = parts[0];
+      var formattedMonth = month + '/' + year;
+      
+      // Hiển thị thông báo đang xử lý
+      var btn = document.querySelector('.btn');
+      var originalText = btn.textContent;
+      btn.textContent = 'Đang xử lý...';
+      btn.disabled = true;
+      
+      // Gọi hàm server để tổng hợp báo cáo
+      google.script.run
+        .withSuccessHandler(function(result) {
+          // Khôi phục nút
+          btn.textContent = originalText;
+          btn.disabled = false;
+          
+          if (result) {
+            // Đóng hộp thoại sau khi hoàn thành
+            google.script.host.close();
+          } else {
+            errorMessage.textContent = 'Có lỗi xảy ra khi tổng hợp báo cáo.';
+            errorMessage.classList.remove('hidden');
+          }
+        })
+        .withFailureHandler(function(error) {
+          // Khôi phục nút
+          btn.textContent = originalText;
+          btn.disabled = false;
+          
+          errorMessage.textContent = 'Lỗi: ' + error;
+          errorMessage.classList.remove('hidden');
+        })
+        .consolidateMonthlyReports({
+          monthYear: formattedMonth,
+          selectedSheets: selectedSheets
+        });
+    }
+  </script>
+</body>
+</html>

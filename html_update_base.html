@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body { font-family: 'Times New Roman', serif; font-size: 12px; }
+      #status { display: none; color: blue; font-weight: bold; margin-top: 10px; }
+    </style>
+  </head>
+  <body>
+    <h3>Cập nhật worksheet cơ sở</h3>
+    <label>Chọn phân xưởng:</label>
+    <select id="unitDropdown">
+      <option value="all">Tất cả</option>
+    </select><br><br>
+    <button onclick="updateBase()">Cập nhật</button>
+    <p id="status"></p>
+
+    <script>
+      function loadUnits() {
+        google.script.run.withSuccessHandler(onUnitsLoaded).getAvailableUnits();
+      }
+
+      function onUnitsLoaded(units) {
+        const dropdown = document.getElementById('unitDropdown');
+        units.forEach(unit => {
+          const option = document.createElement('option');
+          option.value = unit.code;
+          option.textContent = unit.name;
+          dropdown.appendChild(option);
+        });
+      }
+
+      function updateBase() {
+        const selectedUnit = document.getElementById('unitDropdown').value;
+        const status = document.getElementById('status');
+        status.textContent = 'Đang cập nhật...';
+        status.style.display = 'block';
+
+        google.script.run
+          .withSuccessHandler(() => {
+            status.textContent = 'Cập nhật hoàn tất!';
+            status.style.color = 'green';
+          })
+          .updateBaseSheets(selectedUnit);
+      }
+
+      document.addEventListener('DOMContentLoaded', loadUnits);
+    </script>
+  </body>
+</html>

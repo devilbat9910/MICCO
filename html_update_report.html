@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body {
+        font-family: 'Times New Roman', serif;
+        font-size: 12px;
+      }
+      #successMessage, #loadingStatus, #updateStatus {
+        display: none;
+        color: green;
+        font-weight: bold;
+        margin-top: 10px;
+      }
+      #loadingStatus {
+        color: blue;
+      }
+      .checkboxContainer {
+        border: 1px solid #ccc;
+        padding: 10px;
+        max-height: 200px;
+        overflow-y: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h3>Cập nhật báo cáo theo PX</h3>
+
+    <label>Chọn phân xưởng:</label>
+    <select id="unitDropdown" onchange="updateCheckboxes()">
+      <option value="all">Tất cả</option>
+    </select><br><br>
+
+    <label>Chọn worksheet:</label>
+    <div id="worksheetList" class="checkboxContainer"></div><br>
+
+    <p id="loadingStatus">Đang lấy dữ liệu...</p>
+
+    <button onclick="updateReports()">Cập nhật</button>
+    <button onclick="updateAllReports()">Cập nhật tất cả</button>
+    <p id="updateStatus"></p>
+    <p id="successMessage">Cập nhật báo cáo thành công!</p>
+
+    <script>
+      let worksheets = [];
+
+      function loadWorksheets() {
+        document.getElementById('loadingStatus').style.display = 'block';
+        document.getElementById('loadingStatus').textContent = 'Đang lấy dữ liệu...';
+        google.script.run.withSuccessHandler(onWorksheetsLoaded).getValidWorksheets();
+      }
+
+      function onWorksheetsLoaded(data) {
+        worksheets = data;
+        const dropdown = document.getElementById('unitDropdown');
+        const uniqueUnits = [...new Set(worksheets.map(ws => ws.unitName))];
+        uniqueUnits.forEach(unit => {
+          const option = document.createElement('option');
+          option.value = unit;
+          option.textContent = unit;
+          dropdown.appendChild(option);
+        });
+        updateCheckboxes();
+        document.getElementById('loadingStatus').textContent = 'Chọn báo cáo và cập nhật';
+      }
+
+      function updateCheckboxes() {
+        const selectedUnit = document.getElementById('unitDropdown').value;
+        const container = document.getElementById('worksheetList');
+        container.innerHTML = '';
+        const filteredWorksheets = selectedUnit === 'all' 
+          ? worksheets 
+          : worksheets.filter(ws => ws.unitName === selectedUnit);
+
+        filteredWorksheets.forEach(ws => {
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.value = ws.name;
+          checkbox.id = 'ws_' + ws.name;
+          container.appendChild(checkbox);
+
+          const label = document.createElement('label');
+          label.textContent = ws.displayName;
+          label.setAttribute('for', 'ws_' + ws.name);
+          label.style.marginLeft = '5px';
+          container.appendChild(label);
+          container.appendChild(document.createElement('br'));
+        });
+      }
+
+      function updateReports() {
+        const selectedWorksheets = Array.from(document.querySelectorAll('#worksheetList input:checked'))
+          .map(cb => cb.value);
+        if (!selectedWorksheets.length) {
+          alert('Vui lòng chọn ít nhất một worksheet.');
+          return;
+        }
+        const updateStatus = document.getElementById('updateStatus');
+        updateStatus.textContent = 'Đang cập nhật...';
+        updateStatus.style.display = 'block';
+
+        google.script.run
+          .withSuccessHandler(() => {
+            updateStatus.textContent = `Đã cập nhật ${selectedWorksheets.length}/${selectedWorksheets.length} worksheet.`;
+            setTimeout(() => {
+              updateStatus.textContent = 'Cập nhật hoàn tất!';
+              updateStatus.style.color = 'green';
+            }, 1000);
+          })
+          .processSelectedWorksheets(selectedWorksheets);
+      }
+
+      function updateAllReports() {
+        const allCheckboxes = document.querySelectorAll('#worksheetList input[type="checkbox"]');
+        allCheckboxes.forEach(cb => cb.checked = true);
+        updateReports();
+      }
+
+      document.addEventListener('DOMContentLoaded', loadWorksheets);
+    </script>
+  </body>
+</html>

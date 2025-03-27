@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      #successMessage {
+        display: none;
+        color: green;
+        font-weight: bold;
+        margin-top: 10px;
+      }
+      .checkboxContainer {
+        border: 1px solid #ccc;
+        padding: 10px;
+        max-height: 200px;
+        overflow-y: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h3>Tổng hợp báo cáo theo tháng</h3>
+
+    <label>Tháng/Năm báo cáo:</label>
+    <input type="month" id="monthYear"><br><br>
+
+    <label>Danh sách các sheet:</label>
+    <div>
+      <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)">
+      <label for="selectAll" style="font-weight: bold;">Chọn tất cả</label>
+    </div>
+    <div id="sheetList" class="checkboxContainer"></div><br>
+
+    <button onclick="applyFilter()">Tổng hợp báo cáo</button>
+
+    <p id="successMessage">Báo cáo đã được tạo thành công!</p>
+
+    <script>
+      // Lấy danh sách sheet khi trang được tải
+      function populateSheets() {
+        google.script.run.withSuccessHandler(onSheetsLoaded).getValidWorksheets();
+      }
+
+      // Hiển thị danh sách sheet lên giao diện
+      function onSheetsLoaded(sheets) {
+        const container = document.getElementById('sheetList');
+        container.innerHTML = "";
+        sheets.forEach(sheet => {
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.value = sheet.name;
+          checkbox.name = 'sheet';
+          checkbox.classList.add('sheetCheckbox');
+          checkbox.id = "sheet_" + sheet.name;
+          container.appendChild(checkbox);
+
+          const label = document.createElement('label');
+          label.textContent = sheet.displayName;
+          label.setAttribute('for', "sheet_" + sheet.name);
+          label.style.marginLeft = '5px';
+          container.appendChild(label);
+          container.appendChild(document.createElement('br'));
+        });
+      }
+
+      // Chọn hoặc bỏ chọn tất cả checkbox
+      function toggleSelectAll(selectAllCheckbox) {
+        document.querySelectorAll('.sheetCheckbox').forEach(checkbox => {
+          checkbox.checked = selectAllCheckbox.checked;
+        });
+      }
+
+      // Gửi dữ liệu đã chọn để xử lý
+      function applyFilter() {
+        const monthYear = document.getElementById('monthYear').value;
+        const selectedSheets = Array.from(document.querySelectorAll('input[name="sheet"]:checked'))
+          .map(checkbox => checkbox.value);
+
+        if (!monthYear) {
+          alert('Vui lòng chọn Tháng/Năm báo cáo.');
+          return;
+        }
+        if (!selectedSheets.length) {
+          alert('Vui lòng chọn ít nhất một sheet.');
+          return;
+        }
+
+        const successMessage = document.getElementById('successMessage');
+        successMessage.textContent = 'Đang tạo bảng... xin chờ!';
+        successMessage.style.color = 'blue';
+        successMessage.style.display = 'block';
+
+        google.script.run
+          .withSuccessHandler(() => {
+            successMessage.textContent = 'Báo cáo đã được tạo thành công!';
+            successMessage.style.color = 'green';
+          })
+          .summarizeMonthlyReportsHtml({ monthYear: monthYear, selectedSheets: selectedSheets });
+      }
+
+      // Gọi hàm populateSheets khi trang tải xong
+      document.addEventListener('DOMContentLoaded', populateSheets);
+    </script>
+  </body>
+</html>
