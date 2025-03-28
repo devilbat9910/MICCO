@@ -1,77 +1,122 @@
 /**
- * Hàm được gọi từ giao diện HTML khi người dùng nhấn nút "Tạo báo cáo".
- * @param {Object} data - Đối tượng chứa:
- *    - monthYear: chuỗi tháng/năm theo định dạng "MM/YYYY"
- *    - selectedProducts: mảng danh mục sản phẩm đã chọn (có thể dùng cho xử lý mở rộng)
+ * Module xử lý việc chọn và tổng hợp báo cáo theo tháng
  */
-function generateAndCopySheet(data) {
+
+/**
+ * Lấy danh sách tất cả các sheet báo cáo, bao gồm cả sheet bị ẩn
+ * @returns {Array} Danh sách các sheet báo cáo
+ */
+function getAllReportSheets() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var monthYear = data.monthYear; // Đã có định dạng "MM/YYYY"
-  var outputSheetName = 'BC_TCT_' + monthYear;
+  var sheets = ss.getSheets();
+  var reportSheets = [];
   
-  var templateSheet = ss.getSheetByName('BC_TCT');
-  if (!templateSheet) {
-    Logger.log('Không tìm thấy sheet mẫu BC_TCT');
-    SpreadsheetApp.getUi().alert('Không tìm thấy sheet mẫu BC_TCT.');
-    return;
+  // Lấy tất cả sheet, bao gồm cả sheet bị ẩn
+  for (var i = 0; i < sheets.length; i++) {
+    var sheet = sheets[i];
+    var sheetName = sheet.getName();
+    
+    // Kiểm tra các định dạng báo cáo
+    var isPXReport = sheetName.match(/^PX([A-ZĐ]{2})_Báo cáo (\d{2})\/(\d{4})$/);
+    
+    if (isPXReport) {
+      // Trích xuất thông tin tháng/năm
+      var monthYear = isPXReport[2] + '/' + isPXReport[3];
+      
+      reportSheets.push({
+        name: sheetName,
+        visible: !sheet.isSheetHidden(),
+        monthYear: monthYear,
+        unitCode: isPXReport[1]
+      });
+    }
   }
   
+  return reportSheets;
+}
 
-  // Nếu chưa có sheet OUTPUT, tạo bằng cách nhân bản sheet mẫu
-  var outputSheet = ss.getSheetByName(outputSheetName);
-  if (!outputSheet) {
-    outputSheet = templateSheet.copyTo(ss).setName(outputSheetName);
-    outputSheet.showSheet(); // Hiển thị sheet ngay cả khi sheet gốc bị ẩn
-  }
-
+/**
+ * Lọc danh sách sheet theo tháng/năm
+ * @param {string} monthYear - Tháng/năm được chọn (MM/YYYY)
+ * @returns {Array} Danh sách các sheet phù hợp với tháng/năm đã chọn
+ */
+function filterSheetsByMonth(monthYear) {
+  var allSheets = getAllReportSheets();
   
-  // Tìm các sheet INPUT có tên theo định dạng: PX<PHAN_XUONG>_Báo cáo <MM/YYYY>
-  var regex = new RegExp('^PX(ĐT|QN|CP|TB|NB|ĐN|VT)_Báo cáo ' + monthYear + '$');
-  var sheets = ss.getSheets().filter(function(sheet) {
-    return regex.test(sheet.getName());
+  if (!monthYear) {
+    return allSheets; // Trả về tất cả nếu không có lọc
+  }
+  
+  // Lọc theo tháng/năm
+  return allSheets.filter(function(sheet) {
+    return sheet.monthYear === monthYear;
   });
-  
-  if (sheets.length === 0) {
-    Logger.log('Không tìm thấy worksheet nào phù hợp với tháng/năm ' + monthYear);
-    SpreadsheetApp.getUi().alert('Không tìm thấy worksheet nào phù hợp với tháng/năm ' + monthYear);
-    return;
-  }
-  
-  // Lấy dữ liệu hiện có của sheet OUTPUT và tạo map (key = "cột A|cột B") từ dòng 11 (index 10)
-  var outputData = outputSheet.getDataRange().getValues();
-  var outputMap = {};
-  for (var i = 10; i < outputData.length; i++) {
-    var key = outputData[i][0] + '|' + outputData[i][1];
-    outputMap[key] = i;
-  }
-  
-  // Duyệt qua từng sheet INPUT (với dữ liệu bắt đầu từ hàng 13, index 12)
-  sheets.forEach(function(sheet) {
-    var inputData = sheet.getDataRange().getValues();
-    for (var i = 12; i < inputData.length; i++) {
-      var key = inputData[i][0] + '|' + inputData[i][1];
-      if (outputMap.hasOwnProperty(key)) {
-        var rowIndex = outputMap[key];
-        // Cộng dồn giá trị ở cột E (index 4) và cột G (index 6)
-        [4, 6].forEach(function(col) {
-          var inputValue = inputData[i][col];
-          if (typeof inputValue === 'number') {
-            if (typeof outputData[rowIndex][col] !== 'number') {
-              Logger.log('Giá trị trong OUTPUT không phải số tại sheet ' + outputSheetName + ' dòng ' + (rowIndex + 1) + ', cột ' + (col + 1));
-            } else {
-              outputData[rowIndex][col] += inputValue;
-            }
-          } else {
-            Logger.log('Dữ liệu không hợp lệ tại ' + sheet.getName() + ' - Hàng ' + (i + 1) + ', Cột ' + (col + 1) + ': ' + inputValue);
-          }
-        });
-      } else {
-        Logger.log('Bỏ qua dòng không khớp: ' + sheet.getName() + ' - Hàng ' + (i + 1));
+}
+
+/**
+ * Lấy danh sách sheet báo cáo theo tháng/năm
+ * @param {string} monthYear - Tháng/năm được chọn (MM/YYYY)
+ * @returns {Array} Danh sách sheet báo cáo phù hợp
+ */
+function getReportSheetsByMonth(monthYear) {
+  return filterSheetsByMonth(monthYear);
+}
+
+/**
+ * Tổng hợp báo cáo từ các sheet được chọn
+ * @param {Object} data - Dữ liệu từ form
+ * @returns {boolean} Kết quả xử lý
+ */
+function consolidateMonthlyReports(data) {
+  try {
+    // Kiểm tra xem có dữ liệu hợp lệ không
+    if (!data || !data.monthYear) {
+      throw new Error('Không có thông tin tháng/năm');
+    }
+    
+    // Lấy danh sách sheet đã chọn
+    var selectedSheets = data.selectedSheets;
+    if (!selectedSheets || selectedSheets.length === 0) {
+      throw new Error('Vui lòng chọn ít nhất một đơn vị');
+    }
+    
+    // Gọi hàm xử lý báo cáo hiện có
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var monthYear = data.monthYear;
+    
+    // Tạo hoặc lấy sheet OUTPUT
+    var outputSheet = getOrCreateSummarySheet(monthYear);
+    
+    // Tìm các sheet INPUT theo tên đã chọn
+    var inputSheets = [];
+    for (var i = 0; i < selectedSheets.length; i++) {
+      var sheet = ss.getSheetByName(selectedSheets[i]);
+      if (sheet) {
+        inputSheets.push(sheet);
       }
     }
-  });
-  
-  // Ghi lại dữ liệu đã cập nhật vào sheet OUTPUT
-  outputSheet.getRange(1, 1, outputData.length, outputData[0].length).setValues(outputData);
-  SpreadsheetApp.getUi().alert('Báo cáo đã được tạo thành công!');
+    
+    if (inputSheets.length === 0) {
+      throw new Error('Không tìm thấy sheet báo cáo nào');
+    }
+    
+    // Tổng hợp dữ liệu từ các sheet đã chọn
+    var aggregatedData = aggregateMonthlyData(inputSheets, 12); // Bắt đầu từ dòng 13 (index 12)
+    
+    // Cập nhật sheet tổng hợp
+    updateSummarySheet(outputSheet, aggregatedData, 10); // Bắt đầu từ dòng 11 (index 10)
+    
+    // Nếu cần, gọi hàm cập nhật dữ liệu sản phẩm
+    try {
+      copyProductDataToOutput(monthYear);
+    } catch (err) {
+      console.error('Lỗi khi xử lý dữ liệu sản phẩm:', err);
+      // Không làm gián đoạn quy trình chính nếu có lỗi ở đây
+    }
+    
+    return true;
+  } catch (error) {
+    SpreadsheetApp.getUi().alert('Lỗi: ' + error.message);
+    return false;
+  }
 }

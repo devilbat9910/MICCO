@@ -41,6 +41,7 @@ function updateHeader(sheet, year, month = null) {
  * @param {number} year - Năm.
  */
 function updateOutputHeaders(sheet, year) {
+  // Cập nhật tiêu đề trong hàng 5 và 7
   [5, 7].forEach(row => {
     const range = sheet.getRange(row, 1, 1, 9);
     const values = range.getValues()[0];
@@ -50,6 +51,7 @@ function updateOutputHeaders(sheet, year) {
     range.setValues([updatedValues]);
   });
 
+  // Cập nhật tiêu đề trong hàng 11, cột D và E
   const rangeD11E11 = sheet.getRange(11, 4, 1, 2);
   const valuesD11E11 = rangeD11E11.getValues()[0];
   const updatedValuesD11E11 = valuesD11E11.map(cell =>

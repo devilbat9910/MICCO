@@ -11,8 +11,8 @@ function summarizeMonthlyReports() {
 
 /**
  * Xử lý dữ liệu nhận từ giao diện HTML.
- * Dữ liệu nhận vào: { monthYear: "YYYY-MM", selectedUnits: [...] }.
- * Chuyển đổi định dạng "YYYY-MM" thành "MM/YYYY" và thực hiện tổng hợp báo cáo.
+ * @param {Object} data - Dữ liệu nhận từ form HTML
+ * @returns {boolean} - Kết quả xử lý
  */
 function summarizeMonthlyReportsHtml(data) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -33,7 +33,6 @@ function summarizeMonthlyReportsHtml(data) {
   }
   var monthYear = parts[1] + '/' + parts[0];
   
-  // --- Phần xử lý tổng hợp dữ liệu từ các sheet INPUT cho các đơn vị ---
   // Tạo hoặc lấy sheet OUTPUT từ mẫu "BC_TCT"
   var outputSheetName = 'BC_TCT_' + monthYear;
   var templateSheet = ss.getSheetByName('BC_TCT');
@@ -56,8 +55,7 @@ function summarizeMonthlyReportsHtml(data) {
   // Cập nhật ô tiêu đề với định dạng tháng năm
   outputSheet.getRange('A6:I6').setValue(formattedDate);
   
-  // TỐI ƯU HÓA PHẦN 1: Chỉ đọc dữ liệu cần thiết từ sheet OUTPUT
-  // Lấy số dòng thực tế có dữ liệu trong sheet OUTPUT (bắt đầu từ dòng 11)
+  // Tối ưu phần 1: Chỉ đọc dữ liệu cần thiết từ sheet OUTPUT
   var lastRow = outputSheet.getLastRow();
   var numRows = lastRow - 10; // Số dòng cần xử lý, bắt đầu từ dòng 11
   
@@ -66,7 +64,7 @@ function summarizeMonthlyReportsHtml(data) {
     return false;
   }
   
-  // Chỉ lấy cột A, B, E, G để tạo map và xử lý (thay vì lấy toàn bộ dữ liệu)
+  // Chỉ lấy cột A, B, E, G để tạo map và xử lý
   var outputDataRange = outputSheet.getRange(11, 1, numRows, 9);
   var outputData = outputDataRange.getValues();
   
@@ -90,26 +88,25 @@ function summarizeMonthlyReportsHtml(data) {
     colGValues[i] = (gValue === "" || gValue === null || isNaN(gValue)) ? 0 : Number(gValue);
   }
   
-  // TỐI ƯU HÓA PHẦN 2: Xử lý các đơn vị được chọn
+  // Tối ưu phần 2: Xử lý các worksheet được chọn
   var missingSheets = [];
-  var selectedUnits = data.selectedUnits;
-  if (!selectedUnits || selectedUnits.length === 0) {
-    ui.alert('Vui lòng chọn ít nhất một đơn vị.');
+  var selectedSheets = data.selectedSheets;
+  if (!selectedSheets || selectedSheets.length === 0) {
+    ui.alert('Vui lòng chọn ít nhất một worksheet.');
     return false;
   }
   
-  // Xử lý từng đơn vị - với tối ưu hóa
-  for (var unitIndex = 0; unitIndex < selectedUnits.length; unitIndex++) {
-    var unit = selectedUnits[unitIndex];
-    var inputSheetName = "PX" + unit + "_Báo cáo " + monthYear;
-    var inputSheet = ss.getSheetByName(inputSheetName);
+  // Xử lý từng worksheet
+  for (var sheetIndex = 0; sheetIndex < selectedSheets.length; sheetIndex++) {
+    var sheetName = selectedSheets[sheetIndex];
+    var inputSheet = ss.getSheetByName(sheetName);
     
     if (!inputSheet) {
-      missingSheets.push(inputSheetName);
-      continue; // Bỏ qua đơn vị không tìm thấy
+      missingSheets.push(sheetName);
+      continue; // Bỏ qua worksheet không tìm thấy
     }
     
-    // TỐI ƯU HÓA PHẦN 3: Chỉ đọc phạm vi cần thiết của INPUT sheet
+    // Tối ưu phần 3: Chỉ đọc phạm vi cần thiết
     var inputLastRow = inputSheet.getLastRow();
     if (inputLastRow <= 12) continue; // Bỏ qua nếu không có dữ liệu
     
@@ -138,7 +135,7 @@ function summarizeMonthlyReportsHtml(data) {
     }
   }
   
-  // TỐI ƯU HÓA PHẦN 4: Cập nhật dữ liệu hàng loạt một lần duy nhất
+  // Tối ưu phần 4: Cập nhật dữ liệu hàng loạt một lần duy nhất
   // Chuyển mảng thành định dạng cần thiết cho setValues
   var formattedColE = colEValues.map(function(value) { return [value]; });
   var formattedColG = colGValues.map(function(value) { return [value]; });
@@ -152,67 +149,12 @@ function summarizeMonthlyReportsHtml(data) {
     ui.alert("Không tìm thấy worksheet có tên: " + missingSheets.join(", "));
   }
   
-  // TỐI ƯU HÓA PHẦN 5: Tách rời việc gọi copyProductDataToOutput để giảm thời gian chờ đợi
-  // Thay vì gọi trực tiếp, sử dụng đặt lịch để thực hiện sau khi đã trả về kết quả
+  // Cập nhật dữ liệu sản phẩm
   try {
-    var lock = LockService.getScriptLock();
-    // Thử khóa trong 5 giây để tránh xung đột nếu có nhiều người dùng
-    if (lock.tryLock(5000)) {
-      // Lưu trữ thông tin để xử lý tiếp
-      PropertiesService.getScriptProperties().setProperty(
-        'PENDING_PRODUCT_DATA', 
-        JSON.stringify({monthYear: monthYear, timestamp: new Date().getTime()})
-      );
-      lock.releaseLock();
-    }
-    
-    // Gọi hàm xử lý sản phẩm - nhưng chạy bất đồng bộ
-    processProductDataAsync();
+    copyProductDataToOutput(monthYear);
   } catch (e) {
-    // Xử lý lỗi nhưng không làm gián đoạn kết quả chính
-    console.error("Lỗi khi chuẩn bị xử lý dữ liệu sản phẩm:", e);
+    console.error("Lỗi khi xử lý dữ liệu sản phẩm:", e);
   }
   
-  // Hoàn thành xử lý chính và trả về thành công
   return true;
-}
-
-/**
- * Hàm xử lý dữ liệu sản phẩm bất đồng bộ.
- * Tách rời khỏi luồng chính để giảm thời gian chờ đợi.
- */
-function processProductDataAsync() {
-  try {
-    var props = PropertiesService.getScriptProperties();
-    var pendingDataJSON = props.getProperty('PENDING_PRODUCT_DATA');
-    
-    if (!pendingDataJSON) return;
-    
-    var pendingData = JSON.parse(pendingDataJSON);
-    var monthYear = pendingData.monthYear;
-    
-    // Chỉ xử lý dữ liệu trong vòng 30 phút
-    var currentTime = new Date().getTime();
-    if (currentTime - pendingData.timestamp > 30 * 60 * 1000) {
-      // Dữ liệu quá cũ, xóa và bỏ qua
-      props.deleteProperty('PENDING_PRODUCT_DATA');
-      return;
-    }
-    
-    // Gọi hàm xử lý sản phẩm thực tế
-    copyProductDataToOutput(monthYear);
-    
-    // Xóa dữ liệu chờ xử lý sau khi hoàn thành
-    props.deleteProperty('PENDING_PRODUCT_DATA');
-  } catch (e) {
-    console.error("Lỗi khi xử lý dữ liệu sản phẩm bất đồng bộ:", e);
-  }
-}
-
-/**
- * Hàm trigger để chạy theo lịch.
- * Thêm tính năng này và đặt trigger để chạy mỗi phút hoặc 5 phút.
- */
-function checkAndProcessPendingTasks() {
-  processProductDataAsync();
 }

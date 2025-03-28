@@ -1,3 +1,10 @@
+/**
+ * Kiểm tra xem một hàng có bị gộp hoặc ẩn không
+ * @param {number} rowIndex - Chỉ số hàng cần kiểm tra
+ * @param {Range[]} mergedRanges - Danh sách vùng đã gộp
+ * @param {number[]} hiddenRows - Danh sách các hàng đã ẩn
+ * @returns {boolean} - True nếu hàng bị gộp hoặc ẩn
+ */
 function isRowMergedOrHidden(rowIndex, mergedRanges, hiddenRows) {
   if (mergedRanges && mergedRanges.length > 0) {
     for (let range of mergedRanges) {
@@ -8,6 +15,7 @@ function isRowMergedOrHidden(rowIndex, mergedRanges, hiddenRows) {
   }
   return hiddenRows.includes(rowIndex); // Kiểm tra dòng ẩn
 }
+
 /**
  * Lấy danh sách các dòng bị ẩn trong sheet
  * @param {Sheet} sheet - Sheet cần kiểm tra
@@ -29,22 +37,14 @@ function getHiddenRows(sheet) {
   }
   return hiddenRows;
 }
-function copyBatchData(batch, batchRowIndexes, summarySheet, allocationColumn, executionColumn) {
-  batch.forEach((row, i) => {
-    const [index, target, , , allocation, , execution] = row;
-    const summaryRow = findOrCreateSummaryRow(summarySheet, index, target);
 
-    if (allocation) summarySheet.getRange(summaryRow, allocationColumn).setValue(allocation);
-    if (execution) summarySheet.getRange(summaryRow, executionColumn).setValue(execution);
-  });
-}
-function processSingleRow(sheet, rowIndex, row, allocationColumn, executionColumn) {
-  const [index, target, , , allocation, , execution] = row;
-  const summaryRow = findOrCreateSummaryRow(sheet, index, target);
-
-  if (allocation) sheet.getRange(summaryRow, allocationColumn).setValue(allocation);
-  if (execution) sheet.getRange(summaryRow, executionColumn).setValue(execution);
-}
+/**
+ * Tìm hoặc tạo hàng trong sheet tổng hợp
+ * @param {Sheet} sheet - Sheet tổng hợp
+ * @param {string|number} index - Chỉ số
+ * @param {string} target - Mục tiêu
+ * @returns {number} - Chỉ số hàng trong sheet
+ */
 function findOrCreateSummaryRow(sheet, index, target) {
   const dataRange = sheet.getRange(11, 1, sheet.getLastRow() - 10, 2);
   const values = dataRange.getValues();

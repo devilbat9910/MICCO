@@ -16,43 +16,23 @@ function getAllReportSheets() {
     var sheet = sheets[i];
     var sheetName = sheet.getName();
     
-    // Kiểm tra các định dạng khác nhau của báo cáo
+    // Kiểm tra các định dạng báo cáo
     var isPXReport = sheetName.match(/^PX([A-ZĐ]{2})_Báo cáo (\d{2})\/(\d{4})$/);
-    var isNBReport = (sheetName.indexOf('NB_Báo cáo') === 0 || 
-                      sheetName.indexOf('PXNB_Báo cáo') === 0 || 
-                      sheetName.indexOf('Ninh Bình_Báo cáo') === 0);
     
-    if (isPXReport || isNBReport) {
+    if (isPXReport) {
       // Trích xuất thông tin tháng/năm
-      var monthYear = extractMonthYearFromSheetName(sheetName);
+      var monthYear = isPXReport[2] + '/' + isPXReport[3];
       
       reportSheets.push({
         name: sheetName,
         visible: !sheet.isSheetHidden(),
         monthYear: monthYear,
-        unitCode: isPXReport ? isPXReport[1] : 'NB'
+        unitCode: isPXReport[1]
       });
     }
   }
   
   return reportSheets;
-}
-
-/**
- * Trích xuất thông tin tháng/năm từ tên sheet
- * @param {string} sheetName - Tên sheet cần trích xuất thông tin
- * @returns {string} Chuỗi chứa thông tin tháng/năm (MM/YYYY)
- */
-function extractMonthYearFromSheetName(sheetName) {
-  // Tìm kiếm mẫu MM/YYYY trong tên sheet
-  var regex = /(\d{2})\/(\d{4})/;
-  var match = sheetName.match(regex);
-  
-  if (match) {
-    return match[0]; // Trả về chuỗi MM/YYYY
-  }
-  
-  return ""; // Trả về chuỗi rỗng nếu không tìm thấy
 }
 
 /**

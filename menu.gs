@@ -7,7 +7,7 @@ function onOpen() {
     .addItem('Cập nhật báo cáo theo PX', 'menuGenerateReport')
     .addItem('Tổng hợp báo cáo theo tháng', 'menuMonthlySummary')
     .addItem('Thu gọn báo cáo', 'shrinkReportUI')
-    .addItem('Tô màu theo quy tắc 4color', 'highlightCells')
+    //.addItem('Tô màu theo quy tắc 4color', 'highlightCells')
     .addItem('Cập nhật worksheet cơ sở', 'menuUpdateBaseSheets')
     .addToUi();
 }

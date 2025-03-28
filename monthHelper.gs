@@ -73,8 +73,7 @@ function findReportSheetsByMonthYear(monthYear) {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = spreadsheet.getSheets();
   
-  // Xây dựng regex để nhận dạng sheet báo cáo cho tháng đang xét:
-  // Ví dụ: "PXNB_Báo cáo 02/2025" khi monthYear là "02/2025"
+  // Xây dựng regex để nhận dạng sheet báo cáo cho tháng đang xét
   const inputSheetRegex = new RegExp(`^PX(ĐT|CP|QN|TB|NB|ĐN|VT)_Báo cáo ${monthYear}$`);
   
   return sheets.filter(function(sheet) {
@@ -126,7 +125,7 @@ function isValidNumber(value) {
 /**
  * Gom dữ liệu từ các sheet tháng vào mảng
  * @param {Array} sheets - Danh sách các sheet cần xử lý
- * @param {number} startRow - Dòng bắt đầu của dữ liệu
+ * @param {number} startRow - Dòng bắt đầu của dữ liệu (0-based)
  * @returns {Object} - Dữ liệu đã được tổng hợp
  */
 function aggregateMonthlyData(sheets, startRow) {
@@ -165,7 +164,7 @@ function aggregateMonthlyData(sheets, startRow) {
  * Cập nhật sheet tổng hợp với dữ liệu đã gom
  * @param {Sheet} outputSheet - Sheet tổng hợp
  * @param {Object} aggregatedData - Dữ liệu đã được tổng hợp
- * @param {number} startRow - Dòng bắt đầu ghi dữ liệu
+ * @param {number} startRow - Dòng bắt đầu ghi dữ liệu (0-based)
  */
 function updateSummarySheet(outputSheet, aggregatedData, startRow) {
   // Lấy dữ liệu hiện có của sheet OUTPUT để tìm kiếm các hàng

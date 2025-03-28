@@ -1,4 +1,3 @@
-
 /**
  * Cập nhật dữ liệu từ worksheet INPUT sang OUTPUT với cấu trúc mới.
  * Chỉ truyền dữ liệu từ các cột tương ứng với tháng được chỉ định.
@@ -19,6 +18,7 @@ function processData(inputSheet, outputSheet, month) {
 
   const inputData = inputSheet.getDataRange().getValues();
   const outputData = outputSheet.getDataRange().getValues();
+  const fontWeights = outputSheet.getDataRange().getFontWeights(); // Lấy thông tin định dạng in đậm
 
   // Hàm phụ để kiểm tra Index Lv1
   function isLevel1Index(value) {
@@ -42,8 +42,6 @@ function processData(inputSheet, outputSheet, month) {
     inputRanges.push({ start: startRow, end: inputData.length - 1 });
   }
 
-  Logger.log(`Detected INPUT ranges: ${JSON.stringify(inputRanges)}`);
-
   // Tìm các vùng dựa trên Index Lv1 trong OUTPUT
   let outputRanges = [];
   startRow = null;
@@ -60,8 +58,6 @@ function processData(inputSheet, outputSheet, month) {
   if (startRow !== null) {
     outputRanges.push({ start: startRow, end: outputData.length - 1 });
   }
-
-  Logger.log(`Detected OUTPUT ranges: ${JSON.stringify(outputRanges)}`);
 
   // Xác định các cột INPUT và OUTPUT tương ứng với tháng
   const inputColumns = { allocation: 4, execution: 6, percentage: 7 }; // Cột E, G, H
@@ -93,6 +89,7 @@ function processData(inputSheet, outputSheet, month) {
       for (let i = 0; i <= inputEnd - inputStart; i++) {
         const inputRow = inputData[inputStart + i];
         const outputRowIndex = outputStart + i;
+        const absoluteRowIndex = outputRowIndex + 1; // 1-based row index for Google Sheets
 
         if (outputRowIndex > outputEnd) break;
 
@@ -102,14 +99,17 @@ function processData(inputSheet, outputSheet, month) {
         const percentageValue = inputRow[inputColumns.percentage];
 
         if (isValidValue(allocationValue)) {
-          outputSheet.getRange(outputRowIndex + 1, outputColumns.allocation).setValue(allocationValue);
+          outputSheet.getRange(absoluteRowIndex, outputColumns.allocation).setValue(allocationValue);
         }
         if (isValidValue(executionValue)) {
-          outputSheet.getRange(outputRowIndex + 1, outputColumns.execution).setValue(executionValue);
+          outputSheet.getRange(absoluteRowIndex, outputColumns.execution).setValue(executionValue);
         }
         if (isValidValue(percentageValue)) {
-          outputSheet.getRange(outputRowIndex + 1, outputColumns.percentage).setValue(percentageValue);
+          outputSheet.getRange(absoluteRowIndex, outputColumns.percentage).setValue(percentageValue);
         }
+
+        // Áp dụng công thức theo quy tắc mới
+        applyFormulas(outputSheet, outputRowIndex, absoluteRowIndex, fontWeights);
       }
     } else {
       Logger.log(`No matching OUTPUT range for INPUT Index: ${inputIndex}`);
@@ -127,19 +127,40 @@ function isValidValue(value) {
 }
 
 /**
- * Tìm hàng tương ứng trong OUTPUT dựa trên "Chỉ tiêu" và "Index".
- * @param {Array[]} outputData - Dữ liệu trong OUTPUT.
- * @param {string} index - Index cần tìm (cột A).
- * @param {string} target - Chỉ tiêu cần tìm (cột B).
- * @param {number} headerRows - Số hàng tiêu đề trong OUTPUT.
- * @returns {number} - Chỉ số hàng tương ứng (0-based index). Nếu không tìm thấy, trả về -1.
+ * Áp dụng công thức cho cột F và G dựa trên quy tắc.
+ * @param {Sheet} outputSheet - Worksheet đích.
+ * @param {number} rowIndex - Chỉ số hàng (0-based).
+ * @param {number} absoluteRowIndex - Chỉ số hàng (1-based).
+ * @param {Array} fontWeights - Mảng chứa thông tin định dạng in đậm.
  */
-function findOutputRow(outputData, index, target, headerRows) {
-  for (let i = headerRows; i < outputData.length; i++) {
-    const [outputIndex, outputTarget] = outputData[i];
-    if (outputIndex === index && outputTarget === target) {
-      return i; // Trả về chỉ số hàng tương ứng
+function applyFormulas(outputSheet, rowIndex, absoluteRowIndex, fontWeights) {
+  try {
+    // Kiểm tra nội dung và định dạng của cột B
+    const cellB = outputSheet.getRange(absoluteRowIndex, 2);
+    const cellBValue = cellB.getValue();
+    const isBold = fontWeights[rowIndex][1] === "bold";
+    
+    // Danh sách các nội dung cần loại trừ khỏi quy tắc in đậm
+    const excludedBoldContents = ["Sản lượng", "Điện - động lực"];
+    
+    // Quyết định có áp dụng công thức hay không
+    const needsFormula = !isBold || excludedBoldContents.includes(cellBValue);
+    
+    if (needsFormula) {
+      // Áp dụng công thức cho cột F (tính theo tỷ lệ G*1000/E)
+      const formulaF = `=G${absoluteRowIndex}*1000/E${absoluteRowIndex}`;
+      outputSheet.getRange(absoluteRowIndex, 6).setFormula(formulaF);
+      
+      // Áp dụng công thức cho cột G (tổng các giá trị trên các tháng)
+      const columnLetters = ['I', 'L', 'O', 'R', 'U', 'X', 'AA', 'AD', 'AG', 'AJ', 'AM', 'AP'];
+      const sumFormula = `=SUM(${columnLetters.map(letter => `${letter}${absoluteRowIndex}`).join(';')})`;
+      outputSheet.getRange(absoluteRowIndex, 7).setFormula(sumFormula);
+    } else {
+      // Xóa công thức nếu là hàng tiêu đề (in đậm và không nằm trong danh sách loại trừ)
+      outputSheet.getRange(absoluteRowIndex, 6).clearContent();
+      outputSheet.getRange(absoluteRowIndex, 7).clearContent();
     }
+  } catch (error) {
+    Logger.log(`Lỗi khi áp dụng công thức cho hàng ${absoluteRowIndex}: ${error.message}`);
   }
-  return -1; // Không tìm thấy
 }
