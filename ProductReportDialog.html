@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 10px;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 20px;
+        font-weight: bold;
+        font-size: 16px;
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+      }
+      select, input {
+        width: 100%;
+        padding: 8px;
+        box-sizing: border-box;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      .checkbox-list {
+        max-height: 250px;
+        overflow-y: auto;
+        border: 1px solid #ddd;
+        padding: 10px;
+        margin: 5px 0;
+        border-radius: 4px;
+      }
+      .product-item {
+        margin-bottom: 5px;
+        padding-left: 15px;
+      }
+      .category {
+        font-weight: bold;
+        margin-top: 10px;
+      }
+      .button-group {
+        text-align: center;
+        margin-top: 20px;
+      }
+      .btn {
+        background-color: #4285f4;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        cursor: pointer;
+        border-radius: 4px;
+        font-weight: bold;
+      }
+      .btn:hover {
+        background-color: #2a75f3;
+      }
+      #status {
+        margin-top: 10px;
+        text-align: center;
+        color: #4285f4;
+        font-weight: bold;
+        display: none;
+      }
+      .checkbox-container {
+        display: flex;
+        align-items: center;
+      }
+      .checkbox-container input[type="checkbox"] {
+        width: auto;
+        margin-right: 5px;
+      }
+      .checkbox-container label {
+        display: inline;
+        font-weight: normal;
+      }
+      .action-buttons {
+        margin: 10px 0;
+      }
+      .action-buttons button {
+        background-color: #f1f1f1;
+        color: #333;
+        border: 1px solid #ddd;
+        padding: 5px 10px;
+        margin-right: 5px;
+        cursor: pointer;
+        border-radius: 4px;
+      }
+      .hidden {
+        display: none;
+      }
+      .indent-1 { padding-left: 20px; }
+      .indent-2 { padding-left: 40px; }
+      .indent-3 { padding-left: 60px; }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      TẠO BÁO CÁO THEO SẢN PHẨM
+    </div>
+    
+    <div class="form-group">
+      <label for="workshopSelect">Chọn phân xưởng:</label>
+      <select id="workshopSelect">
+        <option value="">-- Chọn phân xưởng --</option>
+      </select>
+    </div>
+    
+    <div class="form-group">
+      <label for="monthYearInput">Chọn tháng/năm:</label>
+      <input type="month" id="monthYearInput">
+    </div>
+    
+    <div class="form-group">
+      <label>Chọn sản phẩm:</label>
+      <div class="action-buttons">
+        <button onclick="selectAll(true)">Chọn tất cả</button>
+        <button onclick="selectAll(false)">Bỏ chọn tất cả</button>
+        <button onclick="selectWithProduction()">Chỉ chọn có sản lượng</button>
+      </div>
+      <div id="productList" class="checkbox-list">
+        <div class="loading">Đang tải danh sách sản phẩm...</div>
+      </div>
+    </div>
+    
+    <div class="form-group">
+      <div class="checkbox-container">
+        <input type="checkbox" id="sendToWorkshop" checked>
+        <label for="sendToWorkshop">Gửi báo cáo đến phân xưởng sau khi tạo</label>
+      </div>
+    </div>
+    
+    <div class="button-group">
+      <button class="btn" onclick="createReport()">Tạo báo cáo</button>
+    </div>
+    
+    <div id="status" class="hidden"></div>
+    
+    <script>
+      // Biến toàn cục để lưu trữ dữ liệu
+      let workshops = [];
+      let products = [];
+      let selectedWorkshop = '';
+      
+      // Khi trang được tải
+      document.addEventListener('DOMContentLoaded', function() {
+        // Tải danh sách phân xưởng
+        google.script.run
+          .withSuccessHandler(onWorkshopsLoaded)
+          .withFailureHandler(onError)
+          .getWorkshops();
+        
+        // Tải danh sách sản phẩm
+        google.script.run
+          .withSuccessHandler(onProductsLoaded)
+          .withFailureHandler(onError)
+          .getAllProducts();
+        
+        // Thiết lập giá trị mặc định cho tháng/năm là tháng hiện tại
+        const today = new Date();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const year = today.getFullYear();
+        document.getElementById('monthYearInput').value = year + '-' + month;
+      });
+      
+      // Xử lý sau khi tải danh sách phân xưởng
+      function onWorkshopsLoaded(data) {
+        workshops = data;
+        const select = document.getElementById('workshopSelect');
+        
+        data.forEach(function(workshop) {
+          const option = document.createElement('option');
+          option.value = workshop.code;
+          option.textContent = workshop.name + ' (' + workshop.code + ')';
+          select.appendChild(option);
+        });
+      }
+      
+      // Xử lý sau khi tải danh sách sản phẩm
+      function onProductsLoaded(data) {
+        products = data;
+        renderProductList();
+      }
+      
+      // Hiển thị danh sách sản phẩm
+      function renderProductList() {
+        const container = document.getElementById('productList');
+        container.innerHTML = '';
+        
+        if (!products || products.length === 0) {
+          container.innerHTML = '<div>Không có sản phẩm nào</div>';
+          return;
+        }
+        
+        products.forEach(function(category, index) {
+          // Tạo phần tử cho loại sản phẩm (category)
+          const categoryDiv = document.createElement('div');
+          categoryDiv.className = 'category';
+          
+          const categoryCheckbox = document.createElement('div');
+          categoryCheckbox.className = 'checkbox-container';
+          
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.id = 'cat_' + category.index;
+          checkbox.value = category.index;
+          checkbox.dataset.type = 'category';
+          checkbox.addEventListener('change', function() {
+            toggleCategoryChildren(category.index, this.checked);
+          });
+          
+          const label = document.createElement('label');
+          label.htmlFor = 'cat_' + category.index;
+          label.textContent = category.index + ' - ' + category.name;
+          
+          categoryCheckbox.appendChild(checkbox);
+          categoryCheckbox.appendChild(label);
+          categoryDiv.appendChild(categoryCheckbox);
+          container.appendChild(categoryDiv);
+          
+          // Tạo phần tử cho các sản phẩm con
+          if (category.children && category.children.length > 0) {
+            category.children.forEach(function(product) {
+              const productDiv = document.createElement('div');
+              productDiv.className = 'product-item indent-1';
+              
+              const productCheckbox = document.createElement('div');
+              productCheckbox.className = 'checkbox-container';
+              
+              const checkbox = document.createElement('input');
+              checkbox.type = 'checkbox';
+              checkbox.id = 'prod_' + product.index;
+              checkbox.value = product.index;
+              checkbox.dataset.type = 'product';
+              checkbox.dataset.parent = category.index;
+              checkbox.addEventListener('change', function() {
+                updateParentCheckbox(category.index);
+              });
+              
+              // Thêm class và style nếu có sản lượng
+              if (product.hasProduction) {
+                checkbox.dataset.hasProduction = 'true';
+              }
+              
+              const label = document.createElement('label');
+              label.htmlFor = 'prod_' + product.index;
+              label.textContent = product.index + ' - ' + product.name;
+              
+              // Thêm visual cue nếu có sản lượng
+              if (product.hasProduction) {
+                label.style.color = '#2a75f3';
+              }
+              
+              productCheckbox.appendChild(checkbox);
+              productCheckbox.appendChild(label);
+              productDiv.appendChild(productCheckbox);
+              container.appendChild(productDiv);
+            });
+          }
+        });
+      }
+      
+      // Chọn/bỏ chọn tất cả sản phẩm con của một loại
+      function toggleCategoryChildren(categoryIndex, checked) {
+        const checkboxes = document.querySelectorAll(`input[data-parent="${categoryIndex}"]`);
+        checkboxes.forEach(function(checkbox) {
+          checkbox.checked = checked;
+        });
+      }
+      
+      // Cập nhật trạng thái checkbox của loại sản phẩm dựa trên các sản phẩm con
+      function updateParentCheckbox(categoryIndex) {
+        const parentCheckbox = document.getElementById('cat_' + categoryIndex);
+        const childCheckboxes = document.querySelectorAll(`input[data-parent="${categoryIndex}"]`);
+        
+        let allChecked = true;
+        let anyChecked = false;
+        
+        childCheckboxes.forEach(function(checkbox) {
+          if (checkbox.checked) {
+            anyChecked = true;
+          } else {
+            allChecked = false;
+          }
+        });
+        
+        parentCheckbox.checked = anyChecked;
+        // Có thể thêm trạng thái indeterminate nếu một số được chọn
+        parentCheckbox.indeterminate = anyChecked && !allChecked;
+      }
+      
+      // Chọn/bỏ chọn tất cả sản phẩm
+      function selectAll(checked) {
+        const checkboxes = document.querySelectorAll('#productList input[type="checkbox"]');
+        checkboxes.forEach(function(checkbox) {
+          checkbox.checked = checked;
+          checkbox.indeterminate = false;
+        });
+      }
+      
+      // Chỉ chọn sản phẩm có sản lượng
+      function selectWithProduction() {
+        // Đầu tiên bỏ chọn tất cả
+        selectAll(false);
+        
+        // Sau đó chọn các sản phẩm có sản lượng
+        const productCheckboxes = document.querySelectorAll('#productList input[data-has-production="true"]');
+        productCheckboxes.forEach(function(checkbox) {
+          checkbox.checked = true;
+          
+          // Cập nhật checkbox cha
+          if (checkbox.dataset.parent) {
+            updateParentCheckbox(checkbox.dataset.parent);
+          }
+        });
+      }
+      
+      // Hiển thị thông báo
+      function showStatus(message, isError = false) {
+        const statusDiv = document.getElementById('status');
+        statusDiv.textContent = message;
+        statusDiv.style.color = isError ? 'red' : '#4285f4';
+        statusDiv.classList.remove('hidden');
+      }
+      
+      // Xử lý lỗi
+      function onError(error) {
+        showStatus('Lỗi: ' + error.message, true);
+      }
+      
+      // Tạo báo cáo
+      function createReport() {
+        const workshopSelect = document.getElementById('workshopSelect');
+        const monthYearInput = document.getElementById('monthYearInput');
+        
+        // Kiểm tra đầu vào
+        if (!workshopSelect.value) {
+          showStatus('Vui lòng chọn phân xưởng', true);
+          return;
+        }
+        
+        if (!monthYearInput.value) {
+          showStatus('Vui lòng chọn tháng/năm', true);
+          return;
+        }
+        
+        // Lấy danh sách sản phẩm đã chọn
+        const selectedCheckboxes = document.querySelectorAll('#productList input[type="checkbox"]:checked[data-type="product"]');
+        const selectedProducts = Array.from(selectedCheckboxes).map(checkbox => checkbox.value);
+        
+        if (selectedProducts.length === 0) {
+          showStatus('Vui lòng chọn ít nhất một sản phẩm', true);
+          return;
+        }
+        
+        // Hiển thị thông báo đang xử lý
+        showStatus('Đang tạo báo cáo...');
+        
+        // Chuyển đổi định dạng tháng/năm từ YYYY-MM thành MM/YYYY
+        const parts = monthYearInput.value.split('-');
+        if (parts.length !== 2) {
+          showStatus('Định dạng tháng/năm không hợp lệ', true);
+          return;
+        }
+        const formattedMonthYear = parts[1] + '/' + parts[0];
+        
+        // Tìm tên phân xưởng từ mã
+        const workshop = workshops.find(w => w.code === workshopSelect.value);
+        const workshopName = workshop ? workshop.name : workshopSelect.value;
+        
+        // Gọi hàm tạo báo cáo
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              showStatus(result.message);
+              // Có thể thêm hành động sau khi tạo báo cáo thành công
+              setTimeout(function() {
+                google.script.host.close();
+              }, 2000);
+            } else {
+              showStatus(result.message, true);
+            }
+          })
+          .withFailureHandler(function(error) {
+            showStatus('Lỗi: ' + error.message, true);
+          })
+          .createProductReport({
+            workshopCode: workshopSelect.value,
+            workshopName: workshopName,
+            monthYear: formattedMonthYear,
+            selectedProducts: selectedProducts,
+            sendToWorkshop: document.getElementById('sendToWorkshop').checked
+          });
+      }
+    </script>
+  </body>
+</html>
