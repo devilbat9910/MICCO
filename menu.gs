@@ -9,7 +9,8 @@ function onOpen() {
     .addItem('Thu gọn báo cáo', 'shrinkReportUI')
     //.addItem('Tô màu theo quy tắc 4color', 'highlightCells')
     .addItem('Cập nhật worksheet cơ sở', 'menuUpdateBaseSheets')
-    .addItem('Tạo báo cáo từ gốc', 'showProductReportDialog')
+    //.addItem('Tạo báo cáo từ gốc', 'showProductReportDialog')
+    .addItem('Tạo và gửi biểu theo dõi cho PX', 'showBatchReportDialog')
     .addToUi();
 }
 

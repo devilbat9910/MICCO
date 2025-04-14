@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 10px;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 20px;
+        font-weight: bold;
+        font-size: 16px;
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+      }
+      input[type="month"] {
+        width: 100%;
+        padding: 8px;
+        box-sizing: border-box;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      .checkbox-list {
+        max-height: 250px;
+        overflow-y: auto;
+        border: 1px solid #ddd;
+        padding: 10px;
+        margin: 5px 0;
+        border-radius: 4px;
+      }
+      .workshop-item {
+        margin-bottom: 10px;
+      }
+      .button-group {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 20px;
+      }
+      .btn {
+        background-color: #4285f4;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        cursor: pointer;
+        border-radius: 4px;
+        font-weight: bold;
+        flex-grow: 1;
+        margin: 0 5px;
+      }
+      .btn:first-child {
+        margin-left: 0;
+      }
+      .btn:last-child {
+        margin-right: 0;
+      }
+      .btn:hover {
+        background-color: #2a75f3;
+      }
+      .checkbox-container {
+        display: flex;
+        align-items: center;
+        margin: 5px 0;
+      }
+      .checkbox-container input[type="checkbox"] {
+        width: auto;
+        margin-right: 8px;
+      }
+      .checkbox-container label {
+        display: inline;
+        font-weight: normal;
+      }
+      .progress-container {
+        margin-top: 20px;
+        display: none;
+      }
+      .progress-bar {
+        width: 100%;
+        height: 20px;
+        background-color: #f3f3f3;
+        border-radius: 4px;
+        margin-top: 5px;
+        overflow: hidden;
+      }
+      .progress-fill {
+        height: 100%;
+        background-color: #4285f4;
+        width: 0%;
+        transition: width 0.3s ease;
+      }
+      .status-message {
+        margin-top: 10px;
+        font-weight: bold;
+      }
+      .result-list {
+        margin-top: 10px;
+        font-size: 12px;
+      }
+      .result-item {
+        margin: 5px 0;
+        padding: 5px;
+        border-radius: 4px;
+      }
+      .result-success {
+        background-color: #eeffee;
+        border-left: 3px solid #4caf50;
+      }
+      .result-error {
+        background-color: #ffeeee;
+        border-left: 3px solid #f44336;
+      }
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      TẠO BÁO CÁO CHO PHÂN XƯỞNG
+    </div>
+    
+    <form id="reportForm">
+      <div class="form-group">
+        <label>Nhập tháng/năm và chọn phân xưởng muốn tạo biểu mẫu:</label>
+        <input type="month" id="monthYearInput" required>
+      </div>
+      
+      <div class="form-group">
+        <label>Chọn phân xưởng:</label>
+        <div id="workshopList" class="checkbox-list">
+          <div class="loading">Đang tải danh sách phân xưởng...</div>
+        </div>
+      </div>
+      
+      <div class="checkbox-container">
+        <input type="checkbox" id="deleteAfterSend" checked>
+        <label for="deleteAfterSend">Có xóa Biểu sau khi gửi?</label>
+      </div>
+      
+      <div class="button-group">
+        <button type="button" class="btn" id="createSelectedBtn">Tạo và gửi đã chọn</button>
+        <button type="button" class="btn" id="createAllBtn">Tạo và gửi tất cả</button>
+      </div>
+    </form>
+    
+    <div id="progressContainer" class="progress-container">
+      <div class="status-message" id="statusMessage">Đang xử lý...</div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div class="result-list" id="resultList"></div>
+      <div id="completeMessage" class="hidden">
+        Hoàn thành! Tự động đóng thông báo trong <span id="countdownTimer">3</span> giây.
+      </div>
+    </div>
+    
+    <script>
+      // Biến toàn cục
+      let workshops = [];
+      let countdownInterval;
+      
+      // Khi trang được tải
+      document.addEventListener('DOMContentLoaded', function() {
+        // Tải danh sách phân xưởng với các sản phẩm
+        google.script.run
+          .withSuccessHandler(onWorkshopsLoaded)
+          .withFailureHandler(onError)
+          .getWorkshopsWithProducts();
+        
+        // Thiết lập giá trị mặc định cho tháng/năm là tháng hiện tại
+        const today = new Date();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const year = today.getFullYear();
+        document.getElementById('monthYearInput').value = year + '-' + month;
+        
+        // Gán sự kiện cho các nút
+        document.getElementById('createSelectedBtn').addEventListener('click', function() {
+          createReports(false);
+        });
+        
+        document.getElementById('createAllBtn').addEventListener('click', function() {
+          createReports(true);
+        });
+      });
+      
+      // Xử lý sau khi tải danh sách phân xưởng
+      function onWorkshopsLoaded(data) {
+        workshops = data;
+        renderWorkshopList();
+      }
+      
+      // Hiển thị danh sách phân xưởng
+      function renderWorkshopList() {
+        const container = document.getElementById('workshopList');
+        container.innerHTML = '';
+        
+        if (!workshops || workshops.length === 0) {
+          container.innerHTML = '<div>Không có phân xưởng nào</div>';
+          return;
+        }
+        
+        workshops.forEach(function(workshop, index) {
+          // Bỏ qua các giá trị không hợp lệ
+          if (!workshop.code || !workshop.name || 
+              workshop.code === 'Mã PX' || workshop.name === 'Tên PX' ||
+              workshop.name.includes('Danh sách phân xưởng') || 
+              workshop.name.includes('Việt tắt')) {
+            return;
+          }
+          
+          const workshopItem = document.createElement('div');
+          workshopItem.className = 'workshop-item';
+          
+          const checkboxContainer = document.createElement('div');
+          checkboxContainer.className = 'checkbox-container';
+          
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.id = 'workshop_' + workshop.code;
+          checkbox.value = workshop.code;
+          checkbox.name = 'workshops';
+          
+          const label = document.createElement('label');
+          label.htmlFor = 'workshop_' + workshop.code;
+          label.textContent = workshop.name + ' (' + workshop.code + ')';
+          
+          // Thêm các phần tử vào container
+          checkboxContainer.appendChild(checkbox);
+          checkboxContainer.appendChild(label);
+          workshopItem.appendChild(checkboxContainer);
+          
+          container.appendChild(workshopItem);
+        });
+      }
+      
+      // Tạo báo cáo
+      function createReports(selectAll) {
+        // Hiển thị container tiến trình
+        document.getElementById('progressContainer').style.display = 'block';
+        document.getElementById('statusMessage').textContent = 'Đang chuẩn bị tạo báo cáo...';
+        document.getElementById('progressFill').style.width = '10%';
+        document.getElementById('resultList').innerHTML = '';
+        document.getElementById('completeMessage').classList.add('hidden');
+        
+        // Lấy thông tin tháng/năm
+        const monthYearInput = document.getElementById('monthYearInput').value;
+        if (!monthYearInput) {
+          showError('Vui lòng nhập tháng/năm');
+          return;
+        }
+        
+        // Lấy danh sách phân xưởng đã chọn
+        let selectedWorkshops = [];
+        if (selectAll) {
+          selectedWorkshops = workshops.map(w => w.code);
+        } else {
+          const checkboxes = document.querySelectorAll('input[name="workshops"]:checked');
+          if (checkboxes.length === 0) {
+            showError('Vui lòng chọn ít nhất một phân xưởng');
+            return;
+          }
+          selectedWorkshops = Array.from(checkboxes).map(cb => cb.value);
+        }
+        
+        // Lấy tùy chọn xóa sau khi gửi
+        const deleteAfterSend = document.getElementById('deleteAfterSend').checked;
+        
+        // Chuyển đổi định dạng tháng/năm từ YYYY-MM thành MM/YYYY
+        const parts = monthYearInput.split('-');
+        if (parts.length !== 2) {
+          showError('Định dạng tháng/năm không hợp lệ');
+          return;
+        }
+        const formattedMonthYear = parts[1] + '/' + parts[0];
+        
+        // Cập nhật trạng thái
+        document.getElementById('statusMessage').textContent = 'Đang đọc từ Danh mục sản phẩm...';
+        document.getElementById('progressFill').style.width = '20%';
+        
+        // Vô hiệu hóa form trong khi đang xử lý
+        toggleFormEnabled(false);
+        
+        // Gọi hàm tạo báo cáo
+        google.script.run
+          .withSuccessHandler(function(result) {
+            // Cập nhật tiến trình
+            document.getElementById('progressFill').style.width = '100%';
+            
+            if (result.success) {
+              // Hiển thị kết quả chi tiết
+              displayResults(result.results);
+              
+              // Hiển thị thông báo hoàn thành và thiết lập đếm ngược
+              document.getElementById('completeMessage').classList.remove('hidden');
+              startCountdown(3);
+            } else {
+              showError(result.message);
+            }
+            
+            // Kích hoạt lại form
+            toggleFormEnabled(true);
+          })
+          .withFailureHandler(function(error) {
+            showError('Lỗi: ' + error.message);
+            document.getElementById('progressFill').style.width = '0%';
+            toggleFormEnabled(true);
+          })
+          .createBatchReports({
+            monthYear: formattedMonthYear,
+            selectedWorkshops: selectedWorkshops,
+            deleteAfterSend: deleteAfterSend
+          });
+        
+        // Cập nhật trạng thái
+        document.getElementById('statusMessage').textContent = 'Đang tạo và gửi báo cáo...';
+        document.getElementById('progressFill').style.width = '50%';
+      }
+      
+      // Hiển thị kết quả tạo báo cáo
+      function displayResults(results) {
+        const resultList = document.getElementById('resultList');
+        resultList.innerHTML = '';
+        
+        results.forEach(function(result) {
+          const resultItem = document.createElement('div');
+          resultItem.className = 'result-item ' + (result.success ? 'result-success' : 'result-error');
+          resultItem.textContent = result.name + ' (' + result.code + '): ' + result.message;
+          resultList.appendChild(resultItem);
+        });
+        
+        // Cập nhật thông báo trạng thái
+        const successCount = results.filter(r => r.success).length;
+        document.getElementById('statusMessage').textContent = 
+          `Hoàn thành: ${successCount}/${results.length} báo cáo đã được tạo thành công.`;
+      }
+      
+      // Bắt đầu đếm ngược đóng hộp thoại
+      function startCountdown(seconds) {
+        // Xóa bất kỳ interval hiện có
+        if (countdownInterval) {
+          clearInterval(countdownInterval);
+        }
+        
+        let countdown = seconds;
+        document.getElementById('countdownTimer').textContent = countdown;
+        
+        countdownInterval = setInterval(function() {
+          countdown--;
+          document.getElementById('countdownTimer').textContent = countdown;
+          
+          if (countdown <= 0) {
+            clearInterval(countdownInterval);
+            google.script.host.close();
+          }
+        }, 1000);
+      }
+      
+      // Hiển thị lỗi
+      function showError(message) {
+        document.getElementById('statusMessage').textContent = 'Lỗi: ' + message;
+        document.getElementById('statusMessage').style.color = 'red';
+      }
+      
+      // Xử lý lỗi
+      function onError(error) {
+        showError(error.message);
+      }
+      
+      // Bật/tắt các điều khiển trong form
+      function toggleFormEnabled(enabled) {
+        document.getElementById('monthYearInput').disabled = !enabled;
+        document.getElementById('deleteAfterSend').disabled = !enabled;
+        document.getElementById('createSelectedBtn').disabled = !enabled;
+        document.getElementById('createAllBtn').disabled = !enabled;
+        
+        const checkboxes = document.querySelectorAll('input[name="workshops"]');
+        checkboxes.forEach(function(checkbox) {
+          checkbox.disabled = !enabled;
+        });
+      }
+    </script>
+  </body>
+</html>
